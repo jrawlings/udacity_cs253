@@ -10,15 +10,21 @@ Web applications have the power to provide useful services to millions of people
 
 WEEK 1:How the Web Works
  * Introduction to HTTP and Web Applications
+
 WEEK 2:How to Have Users
  * Getting and processing user input
+
 WEEK 3:How to Manage State
  * Databases and persistent data
+
 WEEK 4:Whom to Trust
  * User authentication and access control
+
 WEEK 5:How to Connect
  * Web applications as services, using APIs
+
 WEEK 6:How to Serve Millions
  * Scaling, caching, optimizations
+
 WEEK 7:Changing the World
  * Building a successful web application, project
