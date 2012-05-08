@@ -4,6 +4,8 @@ runtime: python27
 api_version: 1
 threadsafe: true
 
+skip_files: google_appengine
+
 handlers:
 - url: /unit4.*
   script: unit4.app
