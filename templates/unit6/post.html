@@ -1,0 +1,18 @@
+{% for entry in entries %}
+<div class="post">
+  <div class="post-heading">
+    <a class="post-title" href="/unit6/{{entry.key().id()}}">{{entry.subject}}</a>
+    <div class="post-date">
+      {{entry.created}}
+    </div>
+  </div>
+
+  <div class="post-content">
+    {{entry.content}}
+  </div>
+</div>
+<br><br>
+{% endfor %}
+<div class="age">
+  Queried {{seconds}} seconds ago
+</div>
