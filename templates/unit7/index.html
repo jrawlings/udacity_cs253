@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link type="text/css" rel="stylesheet" href="http://udacity-cs253.appspot.com/static/main.css" />
+    <title>Joe's Blog</title>
+  </head>
+
+  <body>
+    <div class="login-area">
+        {% if user %}
+          <a class="login-link" href="/unit7/_edit{{ page.title if page}}">edit</a>
+          |
+        {% endif %}
+        <a class="login-link" href="/unit7/_history{{page.title if page}}">history</a>
+          |
+        {% if user %}
+          {{user.username}} <a class="login-link" href="/unit7/logout">(logout)</a>
+        {% else %}
+          <a class="login-link" href="/unit7/login">login</a>
+          |
+          <a class="login-link" href="/unit7/signup">signup</a>
+        {% endif %}
+    </div>
+
+    <div id="content">
+      {{content}}
+    </div>
+  </body>
+</html>

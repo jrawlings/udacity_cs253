@@ -7,6 +7,8 @@ threadsafe: true
 skip_files: google_appengine
 
 handlers:
+- url: /unit7.*
+  script: unit7.app
 - url: /unit6.*
   script: unit6.app
 - url: /unit5.*

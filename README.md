@@ -1,5 +1,5 @@
-Web Application Engineering
-===========================
+Udacity 253: Web Application Engineering
+========================================
 
 http://www.udacity.com/overview/Course/cs253/CourseRev/apr2012
 

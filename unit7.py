@@ -30,35 +30,38 @@ import time
 from google.appengine.api import memcache
 from google.appengine.ext import db
 
-template_dir = os.path.join(os.path.dirname(__file__), 'templates/unit6')
+template_dir = os.path.join(os.path.dirname(__file__), 'templates/unit7')
 jinja_env = jinja2.Environment(loader = jinja2.FileSystemLoader(template_dir), autoescape = False)
 jinja_env_escaped = jinja2.Environment(loader = jinja2.FileSystemLoader(template_dir), autoescape = True)
 
 # Cache DB entries using MemCache.
 #
-# 1) If no key is specified, the function will return
-#    all of the posts (used for the main page)
-# 2) If a key is specified, it will be assumed that
-#    this is an ID of an Entry in the DB
+# 1) A key must be specified, the function will return
+#    the requested wiki page if it exists
 #
-# Everything will be cached until the /flush URL is hit
-def load_post(key = 'top', update = False):
+# Everything will be cached
+def load_page(title, version = None, update = False):
+
+	key = title if not version else title + ',' + version
 
 	result = memcache.get(key)
 
-	if update or (key == 'top' and not result):
-		# log text indicating the app is querying the database
-		logging.error("Query All Blog Entries")
-		# select all of our blog entries
-		cursor = db.GqlQuery("SELECT * FROM Entry ORDER BY created DESC")
+	if update or not result:
+		cursor = None
+		if not version:
+			# log text indicating the app is querying the database
+			logging.error("Query Wiki Page '%s'" % key[0])
+			# select the latest wiki page version
+			cursor = db.GqlQuery("SELECT * FROM Page WHERE title = :1 ORDER BY version DESC", title, limit = 1)
+		else:
+			# log text indicating the app is querying the database
+			logging.error("Query Wiki Page '%s' with specific version '%s'" % (title, version))
+			# select a specific wiki page version
+			cursor = db.GqlQuery("SELECT * FROM Page WHERE title = :1 AND version = :2", title, int(version), limit = 1)
 		# run query once, grab the results, and cache them
-		memcache.set(key, (list(cursor), int(round(time.time()))))
-	elif not result:
-		# select all of our blog entries
-		result = Entry.get_by_id(long(key))
-		# run query once, grab the results, and cache them
-		memcache.set(key, (result, int(round(time.time()))))
-	# return all of the posts
+		if cursor.count() > 0:
+			memcache.set(key, (cursor[0], int(round(time.time()))))
+	# return the wiki page
 	return memcache.get(key)
 
 # Secret value used in the HMAC
@@ -132,84 +135,49 @@ class Handler(webapp2.RequestHandler):
 		self.write(self.render_str(template, **kw))
 
 	def render_content(self, template, **kw):
-		content = self.render_str_escaped(template, **kw)
-		self.render("index.html", content=content)
+		content = self.render_str(template, **kw)
+		self.render("index.html", content=content, user=self.get_logged_in_user(), **kw)
 
-	def render_json(self, content):
-		# set the content type as JSON
-		self.response.headers['Content-Type'] = 'application/json'
-		# write out content as JSON and handle date objects with the default handler for now
-		self.response.out.write(json.dumps(content, default= lambda obj: obj.isoformat()))
+	# helper method to see if a User is logged in or not
+	def is_logged_in(self):
+		user_id = None
+		user = None
+		user_id_str = self.request.cookies.get('user_id')
+		if user_id_str:
+			user_id = check_secure_val(user_id_str)
+		return user_id
 
-# Model object representing a Blog Entry
-class Entry(db.Model):
+	# helper method that returns the actual logged in User
+	def get_logged_in_user(self):
+		user_id = self.is_logged_in()
+		user = None
+		if user_id:
+			user = User.get_by_id(long(user_id))
+		return user
+
+# Model object representing a Wiki Page
+class Page(db.Model):
 	content = db.TextProperty(required = True)
-	subject = db.StringProperty(required = True)
+	title = db.StringProperty(required = True, indexed=True)
+	version = db.IntegerProperty(required = True, indexed=True)
 	created = db.DateTimeProperty(auto_now_add = True)
 
-# Model object representing a User of the Blog
+# Model object representing a User of the Wiki
 class User(db.Model):
 	username = db.StringProperty(required = True)
 	password_hash = db.StringProperty(required = True)
 	email = db.StringProperty(required = False)
 	created = db.DateTimeProperty(auto_now_add = True)
 
-# Handler for the main page of the Blog
-# 
-# Will check for /.json routing and render
-# the appropriate content type
-class Unit6Handler(Handler):
-	def render_posts(self, args):
-		
-		posts = load_post()
-
-		if args == '/.json':
-			# map the _entity which contains the raw model attributes
-			self.render_json(content=[e._entity for e in posts[0]])
-		else:
-			# calculate seconds since last cache miss
-			seconds = int(round(time.time())) - posts[1]
-			# render straight html using templates
-			self.render_content("post.html", entries=posts[0], seconds=seconds)
-
-	def get(self, args):
-		self.render_posts(args)
-
-# Handler for flushing the cache
-# 
-# Will clear all of the caches and redirect to 
-# the default home screen
-class Unit6FlushHandler(Handler):
-	def get(self):
-		memcache.flush_all()
-		self.redirect("/unit6")
-
-# Handler for a specific Blog Entry
-# 
-# Will check for .json routing and render
-# the appropriate content type
-class Unit6EntryHandler(Handler):
-	def get(self, entry_id, args):
-		# retrieve the Entry from the Database
-		entry = load_post(entry_id)
-		if args == '.json':
-			# use the _entity which contains the raw model attributes
-			self.render_json(content=entry[0]._entity)
-		else:
-			# calculate seconds since last cache miss
-			seconds = int(round(time.time())) - entry[1]
-			# render straight html using templates
-			self.render_content("post.html", entries=[entry[0]], seconds=seconds)
-
-# Handler for logging out of the Blog
+# Handler for logging out of the Wiki
 #
 # Also clears out the user_id cookie
-class Unit6LogoutHandler(Handler):
+class Unit7LogoutHandler(Handler):
 	def get(self):
 		self.response.headers.add_header('Set-Cookie', 'user_id=; Path=/')
-		self.redirect("/unit6/signup")
+		self.redirect("/unit7")
 
-# Handler for logging in to the Blog
+# Handler for logging in to the Wiki
 #
 # 1) Check against the DB to see if the User exists
 # 2) Validate the User's password against the stored Hash/Salt
@@ -217,7 +185,7 @@ class Unit6LogoutHandler(Handler):
 # 4) Redirect the User to the Welcome page
 #
 # If the login attempt fails, reset the user_id cookie and show the login page again
-class Unit6LoginHandler(Handler):
+class Unit7LoginHandler(Handler):
 	def get(self):
 		self.render_content("login.html")
 
@@ -229,21 +197,22 @@ class Unit6LoginHandler(Handler):
 
 		if users.count() == 1 and valid_pw(users[0].username, password, users[0].password_hash):
 			self.response.headers.add_header('Set-Cookie', 'user_id=%s; Path=/' % make_secure_val(str(users[0].key().id())))
-			self.redirect("/unit6/welcome")
+			self.redirect("/unit7")
 		else:
 			self.response.headers.add_header('Set-Cookie', 'user_id=; Path=/')
 			login_error="Invalid login"
 			self.render_content("login.html", error=login_error)
 
 # Handler for new user signups
-class Unit6SingupHandler(Handler):
+class Unit7SingupHandler(Handler):
 	def get(self):
 		self.render_content("signup.html")
 
-	# When submitting new blog entries, the subject and content 
-	# fields are required. If the blog entry is valid, persist 
-	# the entry to the DB and redirect to the the permalink. If
-	# there is an issue, display an error
+	# When signing up a new user, the username, password
+	# and verify fields are required. The email is optional. 
+	# If there are any field values in error, a message
+	# will be displayed indicating so, otherwise, the User
+	# is created and redirected to the main page '/'
 	def post(self):
 		username = self.request.get('username')
 		password = self.request.get('password')
@@ -257,6 +226,8 @@ class Unit6SingupHandler(Handler):
 
 		if not valid_username(username):
 			username_error = "That's not a valid username."
+		if not (db.GqlQuery("SELECT * FROM User WHERE username = :1", username, limit=1)).count() != 1:
+			username_error = "That username already exists."
 		if not valid_password(password):
 			password_error = "That wasn't a valid password."
 		if not password == verify:
@@ -276,68 +247,93 @@ class Unit6SingupHandler(Handler):
 			user = User(username=username, password_hash=make_pw_hash(username, password), email=email)
 			user.put()
 			self.response.headers.add_header('Set-Cookie', 'user_id=%s; Path=/' % make_secure_val(str(user.key().id())))
-			self.redirect("/unit6/welcome")
+			self.redirect("/unit7")
 
-# Handler for the Welcome screen 
+# Handler for a specific Wiki Page Entry
+class Unit7WikiPageHandler(Handler):
+	def get(self, title, args):
+		
+		if title == None:
+			title = '/'
+
+		# get the version query param if available
+		version = self.request.get('v')
+
+		# retrieve the Page from the Database
+		page = load_page(title, version)
+
+		if not page:
+			self.redirect("/unit7/_edit%s" % title)
+		else:
+			# calculate seconds since last cache miss
+			seconds = int(round(time.time())) - page[1]
+			# render straight html using templates
+			self.render_content("page.html", page=page[0], seconds=seconds)
+
+# Handler for posting new Wiki Page Entries
+class Unit7EditWikiPageHandler(Handler):
+	def render_edit_page(self, title, content=""):
+		if self.is_logged_in():
+			page = load_page(title)
+			self.render_content("edit_page.html", page=page[0] if page else None)
+		else:
+			self.redirect("/unit7/login")
+
+	def get(self, title, args):
+		if self.is_logged_in():
+			self.render_edit_page(title = title)
+		else:
+			self.redirect("/unit7/login")
+
+	# When submitting new wiki page entries, the content 
+	# field is required. If the wiki page is valid, persist 
+	# the entry to the DB and redirect to the permalink.
+	def post(self, title, args):
+		if self.is_logged_in():
+			content = self.request.get("content")
+
+			page = load_page(title)
+
+			if page:
+				page = Page(title=title, content=content, version=page[0].version+1)
+			else:
+				page = Page(title=title, content=content, version=0)
+
+			page.put()
+			load_page(title, update = True)
+			self.redirect("/unit7%s" % title)
+		else:
+			self.redirect("/unit7/login")
+
+# Handler for the History page 
 #
-# This handler simply displays the User's username on a Welcome
-# screen by looking at the user_id cookie
-class Unit6WelcomeHandler(Handler):
-	def get(self):
-		user_id = 0
-		user = None
-		user_id_str = self.request.cookies.get('user_id')
-		if user_id_str:
-			user_id = check_secure_val(user_id_str)
+# This handler simply displays the history of a Wiki Page
+# while providing the ability to edit and view a particular 
+# page version
+class Unit7HistoryWikiPageHandler(Handler):
+	def get(self, title, args):
+		if title == None:
+			title = '/'
 
-		if not user_id:
-			self.redirect("/unit6/signup")
-		else:
-			user = User.get_by_id(long(user_id))
-			self.render_content("welcome.html", user=user)
+		# retrieve the Page Versions from the Database
+		pageVersions = db.GqlQuery("SELECT * FROM Page WHERE title = :1", title)
+		# display all of the different versions
+		self.render_content("history.html", versions=list(pageVersions))
 
-# Handler for posting new Blog Entries
-class Unit6NewPostHandler(Handler):
-
-	def render_new_post(self, subject="", content="", error=""):
-		self.render_content("new_post.html", subject=subject, content=content, error=error)
-
-	def get(self):
-		self.render_new_post()
-
-	# When submitting new blog entries, the subject and content 
-	# fields are required. If the blog entry is valid, persist 
-	# the entry to the DB and redirect to the the permalink. If
-	# there is an issue, display an error
-	def post(self):
-		subject = self.request.get("subject")
-		content = self.request.get("content")
-
-		if subject and content:
-			entry = Entry(subject = subject, content = content)
-			entry.put()
-			load_post(update = True)
-			self.redirect("/unit6/" + str(entry.key().id()))
-		else:
-			error = "subject and content, please!"
-			self.render_new_post(subject=subject, content=content, error = error)
-
+# regular expression for handling arbitrary page names
+PAGE_RE = r'((/(?:[a-zA-Z0-9_-]+/?)*))?'
 # All WebApp Handlers
 app = webapp2.WSGIApplication([
-		# render HTML or JSON depending on the suffix provided
-		  ('/unit6(/.json)?', Unit6Handler)
-		# handler for submitting new posts
-		, ('/unit6/newpost', Unit6NewPostHandler)
+		# handler for editing wiki pages
+		('/unit7/_edit' + PAGE_RE, Unit7EditWikiPageHandler)
+		# handler for showing the history of wiki pages
+		, ('/unit7/_history' + PAGE_RE, Unit7HistoryWikiPageHandler)
 		# handler for logging in
-		, ('/unit6/login', Unit6LoginHandler)
+		, ('/unit7/login', Unit7LoginHandler)
 		# handler for logging out
-		, ('/unit6/logout', Unit6LogoutHandler)
+		, ('/unit7/logout', Unit7LogoutHandler)
 		# handler for signing users up
-		, ('/unit6/signup', Unit6SingupHandler)
-		# welcome handler
-		, ('/unit6/welcome', Unit6WelcomeHandler)
-		# flush the cache and redirect
-		, ('/unit6/flush', Unit6FlushHandler)
-		# render HTML or JSON depending on the suffix provided
-		, ('/unit6/(\d+)(.json)?', Unit6EntryHandler)
+		, ('/unit7/signup', Unit7SingupHandler)
+		# handler for showing wiki pages
+		, ('/unit7' + PAGE_RE, Unit7WikiPageHandler)
 	], debug=True)

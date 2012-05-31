@@ -1,0 +1,12 @@
+<table>
+  <tbody>
+    {% for pageVersion in versions %}
+      <tr>
+        <td>{{ pageVersion.created }}</td>
+        <td>{{ pageVersion.content }}</td>
+        <td><a href="/unit7{{ pageVersion.title }}?v={{ pageVersion.version }}">view</a></td>
+        <td><a href="/unit7/_edit{{ pageVersion.title }}">edit</a></td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
